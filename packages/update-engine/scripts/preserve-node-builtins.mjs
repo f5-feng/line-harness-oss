@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const builtins = builtinModules
-  .filter((name) => !name.startsWith('node:') && !name.includes('/'))
+  .filter((name) => !name.startsWith('node:'))
   .sort((a, b) => b.length - a.length);
 
 const builtinPattern = builtins.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
