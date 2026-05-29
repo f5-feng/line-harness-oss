@@ -675,6 +675,13 @@ CREATE TABLE scoring_rules (
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
+CREATE TABLE segments (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  conditions TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
 CREATE TABLE staff (
   id                       TEXT PRIMARY KEY,
   line_account_id          TEXT NOT NULL,

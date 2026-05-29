@@ -270,6 +270,7 @@ broadcasts.post('/api/broadcasts', async (c) => {
       altText?: string | null;
       accountIds?: string[];
       dedupPriority?: string[];
+      segmentConditions?: SegmentCondition | null;
     }>();
 
     if (!body.title || !body.messageType || !body.messageContent || !body.targetType) {
@@ -282,6 +283,19 @@ broadcasts.post('/api/broadcasts', async (c) => {
     if (body.targetType === 'tag' && !body.targetTagId) {
       return c.json(
         { success: false, error: 'targetTagId is required when targetType is "tag"' },
+        400,
+      );
+    }
+
+    if (
+      body.targetType === 'segment' &&
+      (!body.segmentConditions ||
+        (body.segmentConditions.operator !== 'AND' && body.segmentConditions.operator !== 'OR') ||
+        !Array.isArray(body.segmentConditions.rules) ||
+        body.segmentConditions.rules.length === 0)
+    ) {
+      return c.json(
+        { success: false, error: 'segmentConditions (operator + non-empty rules) is required when targetType is "segment"' },
         400,
       );
     }
@@ -309,11 +323,18 @@ broadcasts.post('/api/broadcasts', async (c) => {
       dedupPriority: body.dedupPriority,
     });
 
-    // Save line_account_id and alt_text if provided
+    // Save line_account_id, alt_text, and segment_conditions if provided.
+    // segment_conditions is persisted on the draft so the operator can send to
+    // the segment later (the /:id/send handler routes target_type='segment' to
+    // the segmented queue path, which reads this column).
     const updates: string[] = [];
     const binds: unknown[] = [];
     if (body.lineAccountId) { updates.push('line_account_id = ?'); binds.push(body.lineAccountId); }
     if (body.altText) { updates.push('alt_text = ?'); binds.push(body.altText); }
+    if (body.targetType === 'segment' && body.segmentConditions) {
+      updates.push('segment_conditions = ?');
+      binds.push(JSON.stringify(body.segmentConditions));
+    }
     if (updates.length > 0) {
       binds.push(broadcast.id);
       await c.env.DB.prepare(`UPDATE broadcasts SET ${updates.join(', ')} WHERE id = ?`)
@@ -491,6 +512,36 @@ broadcasts.post('/api/broadcasts/:id/send', async (c) => {
         queued: true,
         message: 'Broadcast queued for immediate background processing',
       }, 202);
+    }
+
+    // target_type='segment' は常にキュー方式。segment_conditions は作成/編集時に
+    // 既に row へ保存済みなので、ここでは status='sending' に lock するだけで
+    // processQueuedBroadcastBatches (cron / waitUntil) が条件を読んで送信する。
+    if (existing.target_type === 'segment') {
+      const segmentConditions = (existing as unknown as Record<string, unknown>).segment_conditions;
+      if (!segmentConditions) {
+        return c.json({ success: false, error: 'segment_conditions が未設定です。配信を編集してセグメント条件を保存してください。' }, 400);
+      }
+      const lockResult = await c.env.DB.prepare(
+        `UPDATE broadcasts SET status = 'sending', batch_offset = 0 WHERE id = ? AND status IN ('draft','scheduled')`
+      ).bind(id).run();
+      if (!lockResult.meta.changes) {
+        return c.json({ success: false, error: 'Broadcast is already sent or sending' }, 409);
+      }
+      // cron を待たず即時にバックグラウンド処理を起動 (失敗しても cron が拾う)。
+      try {
+        const ctx = c.executionCtx as ExecutionContext;
+        const defaultClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
+        ctx.waitUntil(
+          processQueuedBroadcasts(c.env.DB, defaultClient, c.env.WORKER_URL).catch((err) => {
+            console.error('[segment] background queue processing failed:', err);
+          }),
+        );
+      } catch (kickErr) {
+        console.warn('[segment] waitUntil unavailable, falling back to cron:', kickErr);
+      }
+      const result = await getBroadcastById(c.env.DB, id);
+      return c.json({ success: true, data: result ? serializeBroadcast(result) : null, queued: true, message: 'Broadcast queued for batch processing' }, 202);
     }
 
     // target_type='tag' で対象が多い場合はキュー方式

@@ -1,18 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { Tag } from '@line-crm/shared'
+import type { Tag, SegmentRule, SegmentCondition } from '@line-crm/shared'
 import { api } from '@/lib/api'
-
-interface SegmentRule {
-  type: 'tag_exists' | 'tag_not_exists' | 'metadata_equals' | 'metadata_not_equals' | 'is_following'
-  value: string | boolean | { key: string; value: string }
-}
-
-interface SegmentCondition {
-  operator: 'AND' | 'OR'
-  rules: SegmentRule[]
-}
 
 interface SegmentBuilderProps {
   tags: Tag[]
@@ -27,6 +17,7 @@ const ruleTypeLabels: Record<SegmentRule['type'], string> = {
   tag_not_exists: 'タグなし',
   metadata_equals: 'メタデータ一致',
   metadata_not_equals: 'メタデータ不一致',
+  ref_code: '流入コード',
   is_following: 'フォロー中のみ',
 }
 
@@ -131,6 +122,16 @@ export default function SegmentBuilder({ tags, accountId, initialConditions, onA
                   className="text-xs border border-gray-300 rounded px-2 py-1 w-24"
                 />
               </>
+            )}
+
+            {rule.type === 'ref_code' && (
+              <input
+                type="text"
+                placeholder="ref コード（例: setup）"
+                value={typeof rule.value === 'string' ? rule.value : ''}
+                onChange={(e) => updateRule(i, { value: e.target.value })}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white flex-1"
+              />
             )}
 
             {rule.type !== 'is_following' && (

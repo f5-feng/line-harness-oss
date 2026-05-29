@@ -27,6 +27,8 @@ import type {
   StaffMember,
   Broadcast,
   BroadcastTargetType,
+  Segment,
+  SegmentCondition,
   EntryRoute,
   CreateEntryRouteInput,
   EntryRouteFunnel,
@@ -271,6 +273,7 @@ export const api = {
       lineAccountId?: string | null
       accountIds?: string[]
       dedupPriority?: string[]
+      segmentConditions?: SegmentCondition | null
     }) =>
       fetchApi<ApiResponse<ApiBroadcast>>('/api/broadcasts', {
         method: 'POST',
@@ -359,6 +362,15 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ conditions, accountId }),
       }),
+    list: () =>
+      fetchApi<ApiResponse<Segment[]>>('/api/segments'),
+    create: (data: { name: string; conditions: SegmentCondition }) =>
+      fetchApi<ApiResponse<Segment>>('/api/segments', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      fetchApi<ApiResponse<null>>(`/api/segments/${id}`, { method: 'DELETE' }),
   },
 
   accountSettings: {

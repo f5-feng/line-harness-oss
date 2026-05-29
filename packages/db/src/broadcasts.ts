@@ -1,5 +1,5 @@
 import { jstNow } from './utils.js';
-export type BroadcastTargetType = 'all' | 'tag' | 'multi-account-dedup';
+export type BroadcastTargetType = 'all' | 'tag' | 'segment' | 'multi-account-dedup';
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent';
 export type BroadcastMessageType = 'text' | 'image' | 'flex';
 

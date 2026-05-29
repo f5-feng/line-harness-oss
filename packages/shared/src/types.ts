@@ -102,6 +102,40 @@ export interface FriendTag {
 }
 
 // -----------------------------------------------------------------------------
+// 保存セグメント (Segment) — 名前付きの絞り込み条件セット
+// -----------------------------------------------------------------------------
+
+/** セグメントの1ルール。SegmentBuilder / segment-query と同形式。 */
+export interface SegmentRule {
+  type:
+    | "tag_exists"
+    | "tag_not_exists"
+    | "metadata_equals"
+    | "metadata_not_equals"
+    | "ref_code"
+    | "is_following";
+  value: string | boolean | { key: string; value: string };
+}
+
+/** ルールの組み合わせ条件。 */
+export interface SegmentCondition {
+  operator: "AND" | "OR";
+  rules: SegmentRule[];
+}
+
+/** 保存された名前付きセグメント。 */
+export interface Segment {
+  /** 主キー (UUIDv4) */
+  id: string;
+  /** セグメント名 */
+  name: string;
+  /** 絞り込み条件 */
+  conditions: SegmentCondition;
+  /** 作成日時 (ISO 8601) */
+  createdAt: string;
+}
+
+// -----------------------------------------------------------------------------
 // シナリオ (Scenario)
 // -----------------------------------------------------------------------------
 

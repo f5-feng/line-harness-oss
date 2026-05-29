@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { Tag } from '@line-crm/shared'
+import type { Tag, Segment, SegmentCondition } from '@line-crm/shared'
 import { api, eventsApi, type ApiBroadcast, type EventListItem } from '@/lib/api'
 import { useAccount } from '@/contexts/account-context'
 import FlexPreviewComponent from '@/components/flex-preview'
 import ImageUploader from '@/components/shared/image-uploader'
 import MultiAccountDedupSection from './multi-account-dedup-section'
+import SegmentBuilder from './segment-builder'
 
 interface BroadcastFormProps {
   tags: Tag[]
@@ -30,6 +31,7 @@ interface FormState {
   sendNow: boolean
   accountIds: string[]
   dedupPriority: string[]
+  segmentConditions: SegmentCondition | null
 }
 
 export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFormProps) {
@@ -55,9 +57,22 @@ export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFo
     sendNow: true,
     accountIds: [],
     dedupPriority: [],
+    segmentConditions: null,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // 保存セグメント選択時に SegmentBuilder を初期条件付きで再マウントさせるための seed。
+  const [builderSeed, setBuilderSeed] = useState(0)
+
+  // 保存セグメント一覧（targetType='segment' のとき選択肢として出す）
+  const [savedSegments, setSavedSegments] = useState<Segment[]>([])
+  useEffect(() => {
+    let cancelled = false
+    api.segments.list()
+      .then((r) => { if (!cancelled && r.success) setSavedSegments(r.data) })
+      .catch(() => { /* silent */ })
+    return () => { cancelled = true }
+  }, [])
 
   const handleSave = async () => {
     if (!form.title.trim()) { setError('配信タイトルを入力してください'); return }
@@ -71,6 +86,10 @@ export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFo
     }
     if (form.targetType === 'multi-account-dedup' && form.accountIds.length === 0) {
       setError('複数アカ重複除外: 配信先アカウントを 1 つ以上選択してください')
+      return
+    }
+    if (form.targetType === 'segment' && (!form.segmentConditions || form.segmentConditions.rules.length === 0)) {
+      setError('セグメント: 絞り込み条件を1つ以上設定してください')
       return
     }
 
@@ -93,6 +112,7 @@ export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFo
         lineAccountId: form.targetType === 'multi-account-dedup' ? null : (selectedAccountId || null),
         accountIds: form.targetType === 'multi-account-dedup' ? form.accountIds : undefined,
         dedupPriority: form.targetType === 'multi-account-dedup' ? form.dedupPriority : undefined,
+        segmentConditions: form.targetType === 'segment' ? form.segmentConditions : undefined,
         // datetime-local returns YYYY-MM-DDTHH:mm in JST wall-clock time
         // Append +09:00 so new Date() parses correctly for epoch comparisons
         scheduledAt: form.sendNow || !form.scheduledAt
@@ -275,6 +295,17 @@ export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFo
             </button>
             <button
               type="button"
+              onClick={() => setForm({ ...form, targetType: 'segment', targetTagId: '' })}
+              className={`px-3 py-1.5 min-h-[44px] text-xs font-medium rounded-md border transition-colors ${
+                form.targetType === 'segment'
+                  ? 'border-green-500 text-green-700 bg-green-50'
+                  : 'border-gray-300 text-gray-600 bg-white hover:border-gray-400'
+              }`}
+            >
+              セグメントで絞り込み
+            </button>
+            <button
+              type="button"
               onClick={() => setForm({ ...form, targetType: 'multi-account-dedup', targetTagId: '' })}
               className={`px-3 py-1.5 min-h-[44px] text-xs font-medium rounded-md border transition-colors ${
                 form.targetType === 'multi-account-dedup'
@@ -296,6 +327,43 @@ export default function BroadcastForm({ tags, onSuccess, onCancel }: BroadcastFo
                 <option key={tag.id} value={tag.id}>{tag.name}</option>
               ))}
             </select>
+          )}
+          {form.targetType === 'segment' && (
+            <div className="space-y-2">
+              {savedSegments.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">保存セグメントから選ぶ（任意）</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const seg = savedSegments.find((s) => s.id === e.target.value)
+                      if (seg) {
+                        setForm((prev) => ({ ...prev, segmentConditions: seg.conditions }))
+                        setBuilderSeed((s) => s + 1)
+                      }
+                    }}
+                  >
+                    <option value="">— 保存セグメントを選択 —</option>
+                    {savedSegments.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">選ぶと下の条件に反映されます。さらに編集も可能です。</p>
+                </div>
+              )}
+              <SegmentBuilder
+                key={`seg-builder-${builderSeed}`}
+                tags={tags}
+                accountId={selectedAccountId}
+                initialConditions={form.segmentConditions}
+                onApply={(conditions) => setForm((prev) => ({ ...prev, segmentConditions: conditions }))}
+                onCancel={() => setForm((prev) => ({ ...prev, segmentConditions: null }))}
+              />
+              {form.segmentConditions && form.segmentConditions.rules.length > 0 && (
+                <p className="text-xs text-green-700">✓ この配信に適用する条件を設定済み（{form.segmentConditions.rules.length}件のルール）</p>
+              )}
+            </div>
           )}
           {form.targetType === 'multi-account-dedup' && (
             <MultiAccountDedupSection

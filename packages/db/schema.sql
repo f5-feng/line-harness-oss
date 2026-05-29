@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 
 -- ============================================================
+-- Saved Segments — 名前付きの絞り込み条件セット。
+-- conditions は SegmentCondition の JSON。broadcasts.segment_conditions と同形式なので
+-- 配信時はそのまま流用できる。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS segments (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  conditions TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+-- ============================================================
 -- Friend <-> Tag join
 -- ============================================================
 CREATE TABLE IF NOT EXISTS friend_tags (
