@@ -15,3 +15,19 @@ apps/web/out/
 apps/worker/dist/
 .worktrees/
 .claude/worktrees/
+
+# Local dev secrets (wrangler `.dev.vars`) — never commit
+.dev.vars
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Serena (local AI tooling state)
+.serena/
+
+# Local working/protocol docs — AI開発用の内部メモ。公開OSSリポには含めない。
+# (README / CONTRIBUTING / SECURITY / docs/ など既存の公開文書は追跡を維持する)
+/CLAUDE.md
+/ARCHITECTURE.md
+/PROJECT_CONTEXT.md
+/tasks/
